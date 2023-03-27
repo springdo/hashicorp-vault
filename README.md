@@ -1,4 +1,5 @@
-# Hashicorp Vault setup for COSIGN
+# 🔐 Hashicorp Vault setup for COSIGN
+Setup Hashicorp as a KMS for cosign flow
 
 ## Install the bits and go 
 
@@ -31,9 +32,11 @@ oc exec vault-0 -n vault -- vault operator unseal -address https://vault.vault.s
 ```
 
 
-3. Setup kubernetes auth stuffs (not sure if this is actually needed 🤷)
+3. Setup kubernetes auth stuffs (don't think this is actually needed 🤷)
 ```bash
-oc exec -ti vault-0 -- sh -c "JWT=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) && KUBERNETES_HOST=https://${KUBERNETES_PORT_443_TCP_ADDR}:443 && vault auth enable --tls-skip-verify kubernetes"
+# oc exec -ti vault-0 -- sh -c "JWT=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) && KUBERNETES_HOST=https://${KUBERNETES_PORT_443_TCP_ADDR}:443 && vault auth enable --tls-skip-verify kubernetes"
+
+oc exec vault-0 -n vault -- vault auth enable --tls-skip-verify kubernetes
 ```
 
 4. Enable transits secret engine (KMS for vault) 
