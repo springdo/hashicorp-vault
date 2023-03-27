@@ -1,5 +1,8 @@
 # 🔐 Hashicorp Vault setup for COSIGN
-Setup Hashicorp as a KMS for cosign flow
+Setup Hashicorp as a KMS for cosign flow (extended from @sabre's demo)
+
+## Pre req
+Install the usual stuff - Helm, Cosign, Jq, oc etc. and run andy's [setup.sh script](https://github.com/sabre1041/rh-sigstore-demo) 
 
 ## Install the bits and go 
 
