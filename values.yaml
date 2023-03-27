@@ -1,0 +1,75 @@
+global:
+  openshift: true
+  tlsDisable: false
+
+ui:
+  enabled: true
+
+injector:
+  image:
+    repository: "registry.connect.redhat.com/hashicorp/vault-k8s"
+    tag: "1.0.0-ubi"
+
+  agentImage:
+    repository: "registry.connect.redhat.com/hashicorp/vault"
+    tag: "1.11.3-ubi"    
+
+csi:
+  image:
+    repository: "docker.io/hashicorp/vault-csi-provider"
+    tag: "1.2.0"
+    pullPolicy: IfNotPresent     
+
+server:
+  image:
+    tag: "1.11.3-ubi"
+    repository: registry.connect.redhat.com/hashicorp/vault
+
+  extraEnvironmentVars:
+    VAULT_CACERT: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+
+
+  route:
+    enabled: true
+    host: null
+    tls:
+      termination: reencrypt
+
+  extraVolumes:
+    - type: secret
+      name: vault-server-tls # Matches the ${SECRET_NAME} from above
+
+  volumes:    
+    - name: plugins
+      emptyDir: {}
+    - name: vault-root-token
+      secret:
+        secretName: vault-init
+        optional: true  
+
+  volumeMounts:
+    - mountPath: /usr/local/libexec/vault
+      name: plugins
+      readOnly: false 
+
+  standalone:
+    enabled: true
+    config: |
+      ui = true
+      listener "tcp" {
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+        tls_cert_file = "/vault/userconfig/vault-server-tls/tls.crt"
+        tls_key_file  = "/vault/userconfig/vault-server-tls/tls.key"
+        tls_client_ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
+      }
+
+      storage "file" {
+        path = "/vault/data"
+      }
+
+      plugin_directory = "/usr/local/libexec/vault"
+
+  service: 
+    annotations:
+      service.beta.openshift.io/serving-cert-secret-name: vault-server-tls
