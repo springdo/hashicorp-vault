@@ -45,13 +45,44 @@ oc exec vault-0 -n vault -- vault login --tls-skip-verify $ROOT_TOKEN
 oc exec vault-0 -n vault -- vault secrets enable --tls-skip-verify transit
 ```
 
-5. [Key Generations](https://github.com/sigstore/cosign/blob/6df3ad928010206929f98491171f41adbdc0d780/KMS.md#key-generation-and-management) ... assumes $VAULT_ADDR and $VAULT_TOKEN are set
+5. [Key Generations](https://github.com/sigstore/cosign/blob/main/KMS.md) ... assumes $VAULT_ADDR and $VAULT_TOKEN are set
 ```bash
 export cluster_base_domain=$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')
 export VAULT_ADDR=https://vault-vault.apps.${cluster_base_domain}
 export VAULT_TOKEN=$(oc get secret vault-init -n vault -o jsonpath='{.data.root_token}' | base64 -d )
 
 cosign generate-key-pair --kms hashivault://my-super-duper-private-key
+```
+
+## Signing and verifying an image
+1. Sign in to registry (using podman and Quay in my example)
+```
+podman login quay.io --authfile=$HOME/.docker/config.json -u <USER_NAME>
+```
+
+2. Search and grab an image SHA
+```bash
+IMAGE=quay.io/petbattle/pet-battle
+podman search --list-tags ${IMAGE}
+podman pull ${IMAGE}
+export DIGEST=$(podman inspect quay.io/petbattle/pet-battle | jq -r '.[0].Digest')
+export IMAGE_DIGEST=${IMAGE}@${DIGEST}
+
+echo ${IMAGE_DIGEST}
+```
+
+3. Sign the image and push to registry 
+```bash
+cosign sign --key hashivault://my-super-duper-private-key \
+    --rekor-url=https://$(oc get routes -n rekor-system -o jsonpath='{.items[0].spec.host }') \
+    ${IMAGE_DIGEST}
+```
+
+4. Verify
+```bash
+cosign verify --key hashivault://my-super-duper-private-key \
+    --rekor-url=https://$(oc get routes -n rekor-system -o jsonpath='{.items[0].spec.host }') \
+    ${IMAGE}
 ```
 
 
