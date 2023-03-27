@@ -58,6 +58,9 @@ cosign generate-key-pair --kms hashivault://my-super-duper-private-key
 1. Sign in to registry (using podman and Quay in my example)
 ```
 podman login quay.io --authfile=$HOME/.docker/config.json -u <USER_NAME>
+
+# inititalize cosign 
+cosign initialize --mirror=https://$(oc get routes -n tuf-system -o jsonpath='{.items[0].spec.host }') --root=https://$(oc get routes -n tuf-system -o jsonpath='{.items[0].spec.host }')/root.json
 ```
 
 2. Search and grab an image SHA
@@ -66,23 +69,30 @@ IMAGE=quay.io/petbattle/pet-battle
 podman search --list-tags ${IMAGE}
 podman pull ${IMAGE}
 export DIGEST=$(podman inspect quay.io/petbattle/pet-battle | jq -r '.[0].Digest')
-export IMAGE_DIGEST=${IMAGE}@${DIGEST}
+export KEYED_VAULT=${IMAGE}@${DIGEST}
 
-echo ${IMAGE_DIGEST}
+echo ${KEYED_VAULT}
 ```
 
 3. Sign the image and push to registry 
 ```bash
 cosign sign --key hashivault://my-super-duper-private-key \
     --rekor-url=https://$(oc get routes -n rekor-system -o jsonpath='{.items[0].spec.host }') \
-    ${IMAGE_DIGEST}
+    ${KEYED_VAULT}
 ```
 
 4. Verify
 ```bash
 cosign verify --key hashivault://my-super-duper-private-key \
     --rekor-url=https://$(oc get routes -n rekor-system -o jsonpath='{.items[0].spec.host }') \
-    ${IMAGE}
+    ${KEYED_VAULT}
+```
+
+### No rekor
+```bash
+export KEYED_VAULT=quay.io/petbattle/pet-battle:latest
+cosign sign -y --key hashivault://my-super-duper-private-key $KEYED_VAULT --tlog-upload=false
+cosign verify --key cosign.pub $KEYED_VAULT --insecure-ignore-tlog=true
 ```
 
 
