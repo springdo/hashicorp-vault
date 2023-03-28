@@ -2,12 +2,13 @@
 Setup Hashicorp as a KMS for cosign flow (extended from @sabre's demo)
 
 ## Pre req
-Install the usual stuff - Helm, Cosign, Jq, oc etc. and run andy's [setup.sh script](https://github.com/sabre1041/rh-sigstore-demo) 
+Install the usual stuff - Helm, Cosign, Jq, oc etc. and run andy's [setup.sh script](https://github.com/sabre1041/rh-sigstore-demo) if you want to use the flow with Fulcio & Rekor
 
-## Install the bits and go 
+## Install the bit for Hashicorp Vault
 
 0. Add Helm repo for hashicorpt
 ```bash
+# oc login ...
 helm repo add hashicorp https://helm.releases.hashicorp.com && helm repo update
 ```
 
@@ -48,7 +49,8 @@ oc exec vault-0 -n vault -- vault login --tls-skip-verify $ROOT_TOKEN
 oc exec vault-0 -n vault -- vault secrets enable --tls-skip-verify transit
 ```
 
-5. [Key Generations](https://github.com/sigstore/cosign/blob/main/KMS.md) ... assumes $VAULT_ADDR and $VAULT_TOKEN are set
+## Signing and verifying an image
+0. [Key Generations](https://github.com/sigstore/cosign/blob/main/KMS.md) ... using the `hashivault://some-key` format assumes `$VAULT_ADDR` and `$VAULT_TOKEN` are set. If you've used the setup above then this should work to get the values.
 ```bash
 export cluster_base_domain=$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')
 export VAULT_ADDR=https://vault-vault.apps.${cluster_base_domain}
@@ -57,21 +59,23 @@ export VAULT_TOKEN=$(oc get secret vault-init -n vault -o jsonpath='{.data.root_
 cosign generate-key-pair --kms hashivault://my-super-duper-private-key
 ```
 
-## Signing and verifying an image
 1. Sign in to registry (using podman and Quay in my example)
 ```
 podman login quay.io --authfile=$HOME/.docker/config.json -u <USER_NAME>
 
-# inititalize cosign 
-cosign initialize --mirror=https://$(oc get routes -n tuf-system -o jsonpath='{.items[0].spec.host }') --root=https://$(oc get routes -n tuf-system -o jsonpath='{.items[0].spec.host }')/root.json
+# inititalize cosign to use the local tuf authority
+cosign initialize \
+    --mirror=https://$(oc get routes -n tuf-system -o jsonpath='{.items[0].spec.host }') \
+    --root=https://$(oc get routes -n tuf-system -o jsonpath='{.items[0].spec.host }')/root.json
 ```
 
 2. Search and grab an image SHA
 ```bash
 IMAGE=quay.io/petbattle/pet-battle
+TAG=${IMAGE_TAG_:=latest}
 podman search --list-tags ${IMAGE}
-podman pull ${IMAGE}
-export DIGEST=$(podman inspect quay.io/petbattle/pet-battle | jq -r '.[0].Digest')
+podman pull ${IMAGE}:${TAG}
+export DIGEST=$(podman inspect ${IMAGE}:${TAG} | jq -r '.[0].Digest')
 export KEYED_VAULT=${IMAGE}@${DIGEST}
 
 echo ${KEYED_VAULT}
@@ -86,18 +90,18 @@ cosign sign --key hashivault://my-super-duper-private-key \
 
 4. Verify
 ```bash
-cosign verify --key hashivault://my-super-duper-private-key \
+cosign verify --key cosign.pub \
     --rekor-url=https://$(oc get routes -n rekor-system -o jsonpath='{.items[0].spec.host }') \
     ${KEYED_VAULT}
 ```
 
-### No rekor
+### For a flow with no Rekor / TUF
+Same setup 0 as before with generating the keys then just use these three lines:
 ```bash
 export KEYED_VAULT=quay.io/petbattle/pet-battle:latest
 cosign sign -y --key hashivault://my-super-duper-private-key $KEYED_VAULT --tlog-upload=false
 cosign verify --key cosign.pub $KEYED_VAULT --insecure-ignore-tlog=true
 ```
-
 
 ## clean up
 ```
